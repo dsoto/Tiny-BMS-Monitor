@@ -30,7 +30,10 @@ def make_document(doc):
         balances = '{:016b}'.format(balance)
 
         # get pack current and temp
-        current = np.array(client.read_holding_registers(38, 2, unit=0xAA).registers, dtype=np.uint16).view(dtype=np.float32)[0]
+        current = np.array(client.read_holding_registers(38, 2, unit=0xAA).registers,
+                           dtype=np.uint16).view(dtype=np.float32)[0]
+        voltage = np.array(client.read_holding_registers(36, 2, unit=0xAA).registers,
+                           dtype=np.uint16).view(dtype=np.float32)[0]
         temperature = client.read_holding_registers(48, 2, unit=0xAA).registers[0]/10.
 
         # update trend source
@@ -42,6 +45,8 @@ def make_document(doc):
         trend_source.stream(new)
 
         temp_source.stream({'x':[sample_time], 't':[temperature]})
+        current_source.stream({'ts':[sample_time], 'current':[current]})
+        voltage_source.stream({'ts':[sample_time], 'voltage':[voltage]})
 
         # update bar source
         bar_source.data['c'] = [palette[i-1] for i in cells]
@@ -74,6 +79,8 @@ def make_document(doc):
 
     bar_source = ColumnDataSource({'x': cells, 'v': [], 'c':[]})
     temp_source = ColumnDataSource({'x':[], 't':[]})
+    current_source = ColumnDataSource({'ts':[], 'current':[]})
+    voltage_source = ColumnDataSource({'ts':[], 'voltage':[]})
 
     # set up graphs and callback
     doc.add_periodic_callback(update, 5000)
@@ -82,6 +89,8 @@ def make_document(doc):
     bar_fig = figure(title='Cell Voltages', y_range=[3000, 4200])
     trend_fig = figure(title='Cell Voltages Trend', x_axis_type='datetime')
     temp_fig = figure(title='Temperature', x_axis_type='datetime')
+    current_fig = figure(title='Current', x_axis_type='datetime')
+    voltage_fig = figure(title='Pack Voltage', x_axis_type='datetime')
 
     # generate trend lines and data points
     for i in cells:
@@ -89,12 +98,15 @@ def make_document(doc):
         color = 'c{}'.format(i)
         size = 's{}'.format(i)
         trend_fig.circle(source=trend_source, x='x', y=voltage, color=color, size=size)
-        trend_fig.line(source=trend_source, x='x', y=voltage, color=palette[i-1])
+        trend_fig.line(source=trend_source, x='x', y=voltage, color=palette[i-1], line_width=2)
 
     bar_fig.vbar(source=bar_source, x='x', top='v', color='c', width=0.9)
     temp_fig.line(source=temp_source, x='x', y='t', color='black')
+    current_fig.line(source=current_source, x='ts', y='current', color='black')
+    voltage_fig.line(source=voltage_source, x='ts', y='voltage', color='black')
 
-    plots = grid(row(column(trend_fig, temp_fig), bar_fig), sizing_mode='stretch_both')
+    plots = grid(row(column(trend_fig, row(voltage_fig, current_fig, temp_fig)), bar_fig),
+                 sizing_mode='stretch_both')
     doc.add_root(plots)
     doc.title = "Energus BMS Real-Time Voltages"
 
